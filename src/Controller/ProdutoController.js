@@ -1,18 +1,51 @@
 const express = require("express");
-const Produto = require("../Model/ProdutoModel"); // Importar o modelo Produto
-const Categoria = require("../Model/CategoriaModel"); // Importar o modelo Categoria (para incluir na busca)
+const Produto = require("../Model/ProdutoModel");
+const Categoria = require("../Model/CategoriaModel");
+const yup = require("yup");
 
 const router = express.Router();
+
+// Esquema de validação com Yup
+const produtoSchema = yup.object({
+  nome: yup.string().required("O nome do produto é obrigatório").trim().email("Digite um e-mail válido!"),
+  quantidade: yup
+    .number()
+    .integer("A quantidade deve ser um número inteiro")
+    .positive("A quantidade deve ser um número positivo")
+    .required("A quantidade é obrigatória"),
+  observacoes: yup.string().nullable(), // Permite nulo para observações opcionais
+  categoriaId: yup
+    .number()
+    .integer("O ID da categoria deve ser um número inteiro")
+    .positive("O ID da categoria deve ser um número positivo")
+    .required("O ID da categoria é obrigatório"),
+});
 
 // Rota para criar um novo produto (Create)
 router.post("/", async (req, res) => {
   const { nome, quantidade, observacoes, categoriaId } = req.body;
 
   try {
-    const novoProduto = await Produto.create({ nome, quantidade, observacoes, categoriaId });
+    // Validação dos dados usando Yup
+    await produtoSchema.validate(req.body, { abortEarly: false }); // abortEarly: false para retornar todos os erros
+
+    const novoProduto = await Produto.create({
+      nome,
+      quantidade,
+      observacoes,
+      categoriaId,
+    });
     res.status(201).json(novoProduto);
   } catch (error) {
-    res.status(500).json({ error: "Erro ao criar produto" });
+    if (error instanceof yup.ValidationError) {
+      // Se for um erro de validação do Yup
+      const errors = error.errors; // Array de mensagens de erro
+      return res.status(400).json({ errors }); // Retorna um array de erros
+    } else {
+      // Se for outro tipo de erro (ex: erro no banco de dados)
+      console.error("Erro ao criar produto:", error); // Log para depuração
+      res.status(500).json({ error: "Erro ao criar produto" });
+    }
   }
 });
 
@@ -20,7 +53,7 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const produtos = await Produto.findAll({
-      include: [Categoria]  // Incluir categoria associada
+      include: [Categoria], // Incluir categoria associada
     });
     res.status(200).json(produtos);
   } catch (error) {
@@ -34,7 +67,7 @@ router.get("/:id", async (req, res) => {
 
   try {
     const produto = await Produto.findByPk(id, {
-      include: [Categoria]  // Incluir categoria associada
+      include: [Categoria], // Incluir categoria associada
     });
 
     if (produto) {
@@ -79,7 +112,7 @@ router.delete("/:id", async (req, res) => {
 
     if (produto) {
       await produto.destroy();
-      res.status(204).json();  // Sucesso, sem conteúdo
+      res.status(204).json(); // Sucesso, sem conteúdo
     } else {
       res.status(404).json({ error: "Produto não encontrado" });
     }
